@@ -202,7 +202,7 @@ const state = { cams: new Map() };
 function cs(cam) {
   let s = state.cams.get(cam.id);
   if (!s) {
-    s = { mainProc: null, motionProc: null, recDir: null,
+    s = { mainProc: null, motionProc: null, recDir: null, codec: '', h265: false, codecAt: 0, codecBusy: false,
           motion: { lastFrame: null, lastMotionTs: 0, eventActive: false, eventStart: 0,
                     lastEventEnd: 0, lastScore: 0, eventCount: 0, frames: 0, lastError: '' } };
     state.cams.set(cam.id, s);
@@ -726,7 +726,7 @@ function prepareRecRoot() {
 }
 function startAll() {
   prepareRecRoot();
-  for (const cam of cfg.cameras) { startMain(cam); startMotion(cam); }
+  for (const cam of cfg.cameras) { startMain(cam); startMotion(cam); if (!cs(cam).codec) setTimeout(() => probeCodec(cam), 5000); }
   log(`[rec] 已启动 ${cfg.cameras.filter(camConfigured).length} 台摄像机的连续+事件录像`);
 }
 // ★ 必须等旧 ffmpeg 真正退出再起新的（否则旧进程仍占着 RTSP 会话 → 新进程被拒 SETUP 500 → 用户感觉要等 20~30 秒）
@@ -793,6 +793,20 @@ function probeStream(url, ms) {
       resolve({ ok: true, codec, width: wm ? +wm[1] : 0, height: wm ? +wm[2] : 0, audio: hasAudio, h265: /^(hevc|h265)$/.test(codec) });
     });
   });
+}
+
+// ---------- 编码探测（H.265 引导用）----------
+// 目的：管线是 -c:v copy（不转码），若摄像机是 H.265，浏览器播 HLS 会黑屏/转圈 → 前端要提前给引导
+async function probeCodec(cam) {
+  const s = cs(cam);
+  if (s.codecBusy || shuttingDown || !camConfigured(cam)) return;
+  const url = cam.rtspMain || cam.rtspSub;
+  if (!url) { s.codec = ''; s.h265 = false; return; }
+  s.codecBusy = true;
+  try {
+    const r = await probeStream(url, 12000);
+    if (r && r.ok) { s.codec = r.codec || ''; s.h265 = !!r.h265; s.codecAt = Date.now(); log(`[codec:${cam.dir || cam.id}] ${s.codec}${s.h265 ? '（H.265 → 网页会黑屏，已提示用户）' : ''}`); }
+  } catch { } finally { s.codecBusy = false; }
 }
 
 // ---------- 目录浏览（保存目录选择器） ----------
@@ -1106,6 +1120,7 @@ function camBrief(cam) {
   return { id: cam.id, name: cam.name, dir: cam.dir, configured: camConfigured(cam),
     previewStream: cam.rtspSub ? cam.previewStream : 'main', brand: cam.brand, hasSub: !!cam.rtspSub,
     recAlive: !!s.mainProc, liveAlive: !!s.mainProc, ringAlive: !!s.mainProc, motionAlive: !!s.motionProc,
+    codec: s.codec || '', h265: !!s.h265,
     motion: { active: m.eventActive, lastMotionTs: m.lastMotionTs, lastScore: m.lastScore, eventCount: m.eventCount },
     live: `/live/${cam.id}/index.m3u8` };
 }
@@ -1309,6 +1324,8 @@ const handler = async (req, res, viaSock) => {
       const main = u.rtspMain ? await probeStream(u.rtspMain) : { ok: false, error: '无主码流地址' };
       const sub = u.rtspSub ? await probeStream(u.rtspSub) : { ok: false, error: '未配置子码流' };
       const h265 = (main.h265 || sub.h265) || false;
+      // 把测试结果记进该摄像机状态 → 直播页也能直接给出 H.265 引导（不用等下次启动探测）
+      if (prev) { const st = cs(prev); if (main.ok || sub.ok) { st.codec = (main.ok && main.codec) || (sub.ok && sub.codec) || ''; st.h265 = h265; st.codecAt = Date.now(); } }
       return json(res, { ok: !!(main.ok || sub.ok), main, sub, h265,
         advice: h265 ? '该码流为 H.265，手机/浏览器无法直接播放。请到摄像头后台「配置 → 视音频 → 视频」把编码改为 H.264（建议主、子码流都改），保存后再回来测试。' : '' });
     }

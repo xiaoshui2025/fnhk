@@ -134,3 +134,13 @@ video{object-fit:contain}
 /* v0.4.x: 深色主题下的原生下拉框 —— 不设这两条，Windows/安卓上"选项列表"会白底白字，用户看不见 */
 select{color-scheme:dark}
 select option{background:#111a2b;color:#e6ecf7}
+
+/* ===== H.265 引导条（摄像机用 H.265 时浏览器会黑屏/转圈） ===== */
+.h265 { margin: 12px 0 0; padding: 14px 16px; border-radius: 12px;
+  background: #3a2a12; border: 1px solid #ffcf6b55; color: #ffe6b8; font-size: 14px; line-height: 1.6; }
+.h265.hidden { display: none; }
+.h265hd { font-size: 15px; }
+.h265txt { margin-top: 6px; color: #f3dcb0; }
+.h265txt b { color: #fff; }
+.h265btns { margin-top: 10px; display: flex; gap: 10px; }
+.h265btns .tbtn { text-decoration: none; display: inline-flex; align-items: center; }

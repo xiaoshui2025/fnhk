@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="style.css?v=0.4.0-6">
+<link rel="stylesheet" href="style.css?v=0.4.0-7">
 </head>
 <body>
 <header>
@@ -52,6 +52,16 @@
       <button id="fs" class="tbtn">⛶ 全屏</button>
     </div>
 
+    <!-- H.265 引导（管线的 -c:v copy 不转码，浏览器放不了 HEVC → 黑屏/转圈） -->
+    <div id="h265" class="h265 hidden">
+      <div class="h265hd"><b id="h265ttl">⚠️ 这台摄像机是 H.265 编码</b></div>
+      <div class="h265txt" id="h265txt"></div>
+      <div class="h265btns">
+        <a class="tbtn" href="settings.html">去设置</a>
+        <button class="tbtn" id="h265ok">知道了</button>
+      </div>
+    </div>
+
     <div class="recs">
       <h2>回放 <small id="recinfo"></small></h2>
       <div class="list" id="list"></div>
@@ -70,6 +80,6 @@
 </div>
 
 <script src="hls.min.js"></script>
-<script src="app.js?v=0.4.0-6"></script>
+<script src="app.js?v=0.4.0-7"></script>
 </body>
 </html>

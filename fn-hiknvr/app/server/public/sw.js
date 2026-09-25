@@ -1,6 +1,6 @@
 /* 飞海监控 Service Worker —— 外壳走「网络优先、离线回退缓存」；API/直播/录像一律直连网络
    作用域自适应：既支持统一网关 /app/fn-hiknvr/ 也支持端口直连 / */
-const CACHE = 'fh-shell-v39';
+const CACHE = 'fh-shell-v40';
 const BASE = self.registration.scope;            // 例如 https://host/app/fn-nvr/
 const SCOPE_PATH = new URL(BASE).pathname;       // /app/fn-hiknvr/ 或 /
 const SHELL = ['', 'index.html', 'settings.html', 'app.js', 'style.css', 'hls.min.js',

@@ -70,9 +70,43 @@ function refreshThumbs(force) {
   })();
 }
 
+/* ================= H.265 引导 ================= */
+// 管线是 -c:v copy（不转码）→ 摄像机若是 H.265，浏览器播 HLS 会黑屏/转圈。
+// 两种触发：① 服务端已探到该机是 H.265（cam.h265）② 直播连续失败 3 次 → 给「可能是 H.265」的提示
+const h265Dismissed = new Set();
+let liveFails = 0;
+const H265_FULL = '管线不做转码，浏览器 / 手机网页放不了 H.265，所以画面会一直黑屏或转圈。<br>任选一种：'
+  + '① 到摄像机后台把「主码流」编码改成 <b>H.264</b>（推荐，改完保存即可）；'
+  + '② 若子码流是 H.264，先切「子码流预览」；'
+  + '③ 用支持 HEVC 的播放器（PotPlayer / VLC）或摄像机自带 App 看。';
+const H265_HINT = '画面一直出不来？如果这台摄像机用的是 <b>H.265</b> 编码，浏览器放不了，会黑屏或一直转圈。<br>'
+  + '① 到摄像机后台把编码改成 <b>H.264</b>（推荐）；② 或用支持 HEVC 的播放器 / 摄像机自带 App 看。';
+function applyH265(cam, isHint) {
+  const el = $('#h265'); if (!el || !cam) return;
+  // 用「最新的」状态判断（live 里的 cam 可能是旧对象）
+  const c = (cams.find(x => x.id === cam.id)) || cam;
+  const known = !!c.h265, on = known || !!isHint;
+  if (!on || h265Dismissed.has(c.id)) { el.classList.add('hidden'); return; }
+  const t = $('#h265ttl'); if (t) t.textContent = known ? '⚠️ 这台摄像机是 H.265 编码' : '⚠️ 画面起不来？可能是 H.265 编码';
+  const x = $('#h265txt'); if (x) x.innerHTML = known ? H265_FULL : H265_HINT;
+  el.classList.remove('hidden');
+}
+// 播放连续失败时的「软提示」判定：只有【码流活着 + 浏览器放不了 + 编码未知】才提示
+// 已知是 H.264 → 多半是掉线/离线（不弹编码提示）；管线本身没活 → 不是编码问题
+function maybeH265Hint(cam) {
+  if (!cam) return;
+  const c = cams.find(x => x.id === cam.id) || cam;
+  if (c.h265) { applyH265(c); return; }
+  if (c.codec) { applyH265(c); return; }      // 已知非 H.265 → 保持隐藏
+  if (!c.liveAlive || !c.configured) return;  // 离线/未配置 → 不打扰
+  applyH265(c, true);
+}
+if ($('#h265ok')) $('#h265ok').onclick = () => { if (activeId) h265Dismissed.add(activeId); $('#h265').classList.add('hidden'); };
+
 /* ================= 进入 / 退出单台（用 history 状态机，手机返回键可控）================= */
 function enterCam(cam, pushIt) {
-  activeId = cam.id; soundOn = false; firstRender = true;
+  activeId = cam.id; soundOn = false; firstRender = true; liveFails = 0;
+  h265Dismissed.delete(cam.id); applyH265(cam);
   $('#home').classList.add('hidden'); $('#cam').classList.remove('hidden');
   $('#camname').textContent = cam.name || '摄像机';
   $('#camst').textContent = cam.liveAlive ? '● 直播中' : '○ 离线';
@@ -123,6 +157,7 @@ function startLive(cam, forceMain) {
   const url = U('live/' + cam.id + '/' + (cam.previewStream === 'sub' && !forceMain ? 'index-sub.m3u8' : 'index.m3u8'));
   const onErr = () => {
     setOv('连接中…');
+    if (++liveFails >= 3) maybeH265Hint(cam);     // 连续失败 3 次（≈7 秒）→ 按规则给软提示
     setTimeout(() => {
       if (activeId !== cam.id) return;
       if (cam.previewStream === 'sub' && !forceMain) startLive(cam, true);   // 子码流不可用 → 回退主码流
@@ -133,7 +168,7 @@ function startLive(cam, forceMain) {
     hls = new Hls({ liveSyncDurationCount: 1, enableWorker: true });
     hls.loadSource(url); hls.attachMedia(v);
     hls.on(Hls.Events.ERROR, (e, d) => { if (d && d.fatal) onErr(); });
-    v.addEventListener('playing', () => setOv('直播', 'rec'), { once: true });
+    v.addEventListener('playing', () => { liveFails = 0; setOv('直播', 'rec'); applyH265(cam); }, { once: true });
   } else { v.src = url; }
   v.muted = !soundOn;
   v.play().catch(() => { });
@@ -217,6 +252,7 @@ async function refreshStatus() {
       else {
         $('#camname').textContent = cam.name || '摄像机';
         $('#camst').textContent = cam.liveAlive ? '● 直播中' : '○ 离线';
+        applyH265(cam);
       }
     }
     renderHome();
